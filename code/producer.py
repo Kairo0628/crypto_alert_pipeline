@@ -105,7 +105,7 @@ async def connect_and_create_topic(producer):
                         'trade_price': raw_data['trade_price'],
                         'signed_change_rate': raw_data['signed_change_rate'],
                         'trade_volume': raw_data['trade_volume'],
-                        'timestamp': raw_data['timestamp']
+                        'timestamp': raw_data['timestamp'] // 1000
                     }
 
                     producer.produce(
