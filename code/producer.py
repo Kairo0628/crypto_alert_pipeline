@@ -22,7 +22,7 @@ class MessageCounter:
             return
         
         self.msg_count += 1
-        if self.msg_count % 1_000 == 0:
+        if self.msg_count % 100 == 0:
             print(f'Total {self.msg_count:,} {msg.topic()} messages successfully delivered !')
             print(f'Recent {msg.topic()} message: {json.loads(msg.value())}')
             print()
@@ -103,8 +103,8 @@ async def connect_and_create_topic(producer):
                     anomaly_data = {
                         'code': raw_data['code'],
                         'trade_price': raw_data['trade_price'],
-                        'signed_change_rate': raw_data['signed_change_rate'],
                         'trade_volume': raw_data['trade_volume'],
+                        'raw_timestamp': raw_data['timestamp'],
                         'timestamp': raw_data['timestamp'] // 1000
                     }
 
