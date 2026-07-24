@@ -13,7 +13,7 @@ VOLUME_THRESHOLD = 10.0
 # for Test
 #N = 10
 #PRICE_THRESHOLD = 0.01
-#VOLUME_THRESHOLD = 0.01
+#VOLUME_THRESHOLD = 3
 
 class AnomalyDetectorProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
