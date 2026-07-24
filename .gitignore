@@ -1,2 +1,6 @@
-/kafka-logs
+kafka-logs/metadata
+kafka-logs/data
+spark_checkpoint
+
 *.json
+.env
