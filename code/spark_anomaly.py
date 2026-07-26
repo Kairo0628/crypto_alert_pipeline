@@ -43,8 +43,8 @@ class AnomalyDetectorProcessor(StatefulProcessor):
                 if volume_change_rate >= VOLUME_THRESHOLD:
                     output.append(
                         Row(code = key[0],
-                            curr_trade_price = curr_price,
-                            curr_trade_volume = curr_volume,
+                            trade_price = curr_price,
+                            trade_volume = curr_volume,
                             alert_type = 'volume',
                             ratio = volume_change_rate,
                             raw_timestamp = row.raw_timestamp,
@@ -62,8 +62,8 @@ class AnomalyDetectorProcessor(StatefulProcessor):
                 if abs(price_change_rate) >= PRICE_THRESHOLD:
                     output.append(
                         Row(code = key[0],
-                            curr_trade_price = curr_price,
-                            curr_trade_volume = curr_volume,
+                            trade_price = curr_price,
+                            trade_volume = curr_volume,
                             alert_type = 'price',
                             ratio = price_change_rate,
                             raw_timestamp = row.raw_timestamp,
@@ -106,8 +106,8 @@ if __name__ == '__main__':
 
     output_schema = StructType([
         StructField('code', StringType(), True),
-        StructField('curr_trade_price', DoubleType(), True),
-        StructField('curr_trade_volume', DoubleType(), True),
+        StructField('trade_price', DoubleType(), True),
+        StructField('trade_volume', DoubleType(), True),
         StructField('alert_type', StringType(), True),
         StructField('ratio', DoubleType(), True),
         StructField('raw_timestamp', LongType(), True),
@@ -124,8 +124,10 @@ if __name__ == '__main__':
                     timeMode = 'None'
                 )\
                 .writeStream\
-                .format('console')\
+                .format('kafka')\
                 .option('checkpointLocation', './spark_checkpoint')\
+                .option('kafka.bootstrap.servers', 'localhost:19092')\
+                .option('topic', 'spark_anomaly')\
                 .start()
     
     query.awaitTermination()
