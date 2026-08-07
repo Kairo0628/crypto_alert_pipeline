@@ -1,28 +1,27 @@
 from confluent_kafka import Consumer
-import time
-import json
 from datetime import datetime
 import uuid
+import json
+import time
 
-def get_consumer():
-    config = {
+consumer = Consumer(
+    {
         'bootstrap.servers': 'localhost:19092',
         'group.id': 'crypto_raw',
         'auto.offset.reset': 'earliest'
     }
-
-    return Consumer(config)
+)
 
 def save(records):
     now = datetime.now().strftime('%Y%m%d_%H%M%S')
 
+    # 파일 경로가 해당 스크립트를 실행한 지점에서의 하위 폴더(raw_data)이므로
+    # 원하는 경로에 저장하기 위해서는 프로젝트 루트 폴더에서 스크립트를 실행해야 함
     with open(f'./raw_data/{now}_{uuid.uuid4().hex}.json', 'w', encoding = 'utf-8') as f:
         for r in records:
             f.write(json.dumps(r, ensure_ascii = False) + '\n')
 
 def main():
-    consumer = get_consumer()
-
     topic = 'raw_upbit_tickers'
     consumer.subscribe([topic])
 
@@ -31,6 +30,7 @@ def main():
 
     try:
         while True:
+            # 1분 간격으로 파일을 저장
             msg = consumer.poll(0)
 
             if msg == None:
@@ -43,15 +43,10 @@ def main():
             if msg.error():
                 print(f'Kafka Error: {msg.error()}')
                 continue
-                
-            try:
-                raw_msg = msg.value().decode()
-                parsed_msg = json.loads(raw_msg)
-                buffer.append(parsed_msg)
 
-            except Exception as e:
-                print(f'Parsing Error: {e}')
-                print(msg.value())
+            data = msg.value().decode()
+            parsed_data = json.loads(data)
+            buffer.append(parsed_data)
 
             if len(buffer) > 0 and (time.time() - last_save_time) > 60:
                 save(buffer)
@@ -72,4 +67,4 @@ if __name__ == '__main__':
         main()
 
     except KeyboardInterrupt:
-        print('Consumer interrupted. Save remaining messages')
+        print('Consumer interrupted. Save remaining messages...')

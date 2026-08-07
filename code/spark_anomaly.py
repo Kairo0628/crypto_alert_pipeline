@@ -1,19 +1,13 @@
 from pyspark import SparkConf
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType, TimestampType
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
-import pyspark.sql.functions as f
-
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType, TimestampType
+import pyspark.sql.functions as F
 from typing import Iterator
 
-N = 50
+MAX_BUFFER_SIZE = 50
+VOLUME_THRESHOLD = 15.0
 PRICE_THRESHOLD = 2.5
-VOLUME_THRESHOLD = 10.0
-
-# for Test
-#N = 10
-#PRICE_THRESHOLD = 0.01
-#VOLUME_THRESHOLD = 3
 
 class AnomalyDetectorProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
@@ -22,8 +16,8 @@ class AnomalyDetectorProcessor(StatefulProcessor):
         price_schema = StructType([StructField('price', DoubleType(), True)])
         self.price = handle.getValueState('price', price_schema)
 
-        trade_schema = StructType([StructField('volume', DoubleType(), True)])
-        self.trade = handle.getListState('trade', trade_schema)
+        volume_schema = StructType([StructField('volume', DoubleType(), True)])
+        self.volume = handle.getListState('volume', volume_schema)
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
         output = []
@@ -33,39 +27,43 @@ class AnomalyDetectorProcessor(StatefulProcessor):
             curr_volume = row.trade_volume
 
             # 거래량 이상 감지
-            if self.trade.exists():
-                trade_buffer = [i[0] for i in self.trade.get()]
+            # 소수점 단위로 거래가 가능하므로 직전 거래를 기준으로 할 시 잦은 오류 발생 가능: 0.01 -> 1 (100배)
+            # 직전 50개의 거래를 모아 평균을 계산하여 10배 높은 경우 이상 거래로 간주
+            if self.volume.exists():
+                volume_buffer = [i[0] for i in self.volume.get()]
             else:
-                trade_buffer = []
+                volume_buffer = []
 
-            if len(trade_buffer) >= N:
-                volume_change_rate = curr_volume / (sum(trade_buffer) / N)
+            if len(volume_buffer) >= MAX_BUFFER_SIZE:
+                volume_change_rate = curr_volume / (sum(volume_buffer) / MAX_BUFFER_SIZE)
                 if volume_change_rate >= VOLUME_THRESHOLD:
                     output.append(
                         Row(code = key[0],
                             trade_price = curr_price,
                             trade_volume = curr_volume,
                             alert_type = 'volume',
-                            ratio = volume_change_rate,
+                            rate = volume_change_rate,
                             raw_timestamp = row.raw_timestamp,
                             timestamp = row.timestamp)
                     )
             
-            trade_buffer.append(curr_volume)
-            trade_buffer = trade_buffer[-N:]
-            self.trade.put([(i, ) for i in trade_buffer])
+            volume_buffer.append(curr_volume)
+            volume_buffer = volume_buffer[-MAX_BUFFER_SIZE:]
+            self.volume.put([(i, ) for i in volume_buffer])
 
             # 체결가 이상 감지
+            # 직전 거래가를 기준으로 2.5배 이상 변화했다면 이상 거래로 간주
             if self.price.exists():
                 prev_price = self.price.get()[0]
-                price_change_rate = ((curr_price - prev_price) / prev_price) * 100
+
+                price_change_rate = (curr_price - prev_price) / prev_price * 100
                 if abs(price_change_rate) >= PRICE_THRESHOLD:
                     output.append(
                         Row(code = key[0],
                             trade_price = curr_price,
                             trade_volume = curr_volume,
                             alert_type = 'price',
-                            ratio = price_change_rate,
+                            rate = price_change_rate,
                             raw_timestamp = row.raw_timestamp,
                             timestamp = row.timestamp)
                     )
@@ -81,7 +79,6 @@ if __name__ == '__main__':
     conf.set('spark.sql.shuffle.partitions', '8')
     conf.set('spark.sql.streaming.stateStore.providerClass',
              'org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider')
-    #conf.set('spark.jars.packages', 'org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.1')
     
     spark = SparkSession.builder\
             .config(conf = conf)\
@@ -95,8 +92,8 @@ if __name__ == '__main__':
                 .option('subscribe', 'anomaly_upbit_tickers')\
                 .option('startingOffsets', 'earliest')\
                 .load()
-
-    kafka_input_schema = StructType([
+    
+    input_schema = StructType([
         StructField('code', StringType(), True),
         StructField('trade_price', DoubleType(), True),
         StructField('trade_volume', DoubleType(), True),
@@ -109,13 +106,13 @@ if __name__ == '__main__':
         StructField('trade_price', DoubleType(), True),
         StructField('trade_volume', DoubleType(), True),
         StructField('alert_type', StringType(), True),
-        StructField('ratio', DoubleType(), True),
+        StructField('rate', DoubleType(), True),
         StructField('raw_timestamp', LongType(), True),
         StructField('timestamp', TimestampType(), True),
     ])
 
-    query = input_df.select(f.from_json(f.col('value').cast('string'), schema = kafka_input_schema).alias('values'))\
-                .select(f.col('values.*'))\
+    query = input_df.select(F.from_json(F.col('value').cast('string'), schema = input_schema).alias('values'))\
+                .select(F.col('values.*'))\
                 .groupBy('code')\
                 .transformWithState(
                     statefulProcessor = AnomalyDetectorProcessor(),
@@ -123,11 +120,13 @@ if __name__ == '__main__':
                     outputMode = 'update',
                     timeMode = 'None'
                 )\
+                .select(F.col('code').cast('string').alias('key'),
+                        F.to_json(F.struct('*')).alias('value'))\
                 .writeStream\
                 .format('kafka')\
-                .option('checkpointLocation', './spark_checkpoint')\
                 .option('kafka.bootstrap.servers', 'localhost:19092')\
                 .option('topic', 'spark_anomaly')\
+                .option('checkpointLocation', './spark_checkpoint')\
                 .start()
     
     query.awaitTermination()

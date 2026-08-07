@@ -1,34 +1,11 @@
 from confluent_kafka import Producer
-import websockets
-import uuid
 import json
+import uuid
+import websockets
 import asyncio
 
-class MessageCounter:
-    # 전송 메시지 카운터 클래스
-    # 메시지 카운터와 on_delivery 함수를 여기서 정의
-    # 메시지가 정상적으로 전송된 경우 카운터 증가
-
-    # 로그가 대량으로 출력되는 것을 방지하기 위해
-    # 일반적인 상황에서는 출력하지 않고
-    # 1,000개의 메시지 단위로 전송이 완료된 경우 출력
-    def __init__(self):
-        self.msg_count = 0
-
-    def delivery_callback(self, err, msg):
-        if err:
-            print(f'{msg.topic()} Message delivery Failed: {err}')
-            print()
-            return
-        
-        self.msg_count += 1
-        if self.msg_count % 100 == 0:
-            print(f'Total {self.msg_count:,} {msg.topic()} messages successfully delivered !')
-            print(f'Recent {msg.topic()} message: {json.loads(msg.value())}')
-            print()
-
-def get_producer():
-    config = {
+producer = Producer(
+    {
         'bootstrap.servers': 'localhost:19092',
 
         # Kafka Producer 설계
@@ -54,24 +31,42 @@ def get_producer():
         'retry.backoff.max.ms': 300, # 최대 메시지 전송 재시도 누적 대기 시간
         'delivery.timeout.ms': 1500, # 메시지 생성부터 전송 완료까지 존재 가능한 시간
     }
+)
 
-    return Producer(config)
+class MessageCounter:
+    # 전송 메시지 카운터 클래스
+    # 메시지 카운터와 on_delivery 함수를 여기서 정의
+    # 메시지가 정상적으로 전송된 경우 카운터 증가
 
-async def connect_and_create_topic(producer):
+    # 로그가 대량으로 출력되는 것을 방지하기 위해 100개 단위로 전송이 완료된 경우 출력
+    def __init__(self):
+        self.msg_count = 0
+
+    def delivery_callback(self, err, msg):
+        if err:
+            print(f'Message delivery Failed. Topic: {msg.topic()}. Error:{err}')
+            return
+        
+        self.msg_count += 1
+        if self.msg_count % 100 == 0:
+            print(f'Total {self.msg_count:,} {msg.topic()} messages successfully delivered !')
+            print(f'Recent {msg.topic()} message: {json.loads(msg.value())}')
+
+async def connect_and_create_topic():
     # Upbit에서 제공하는 가상화폐 실시간 현재가 (Ticker)
     # 받아오는 종목: 비트코인(BTC),
     ws_uri = 'wss://api.upbit.com/websocket/v1'
     ws_msg = [
         {'ticket': str(uuid.uuid1())},
-        
         {'type': 'ticker',
-         'codes': ['KRW-BTC',
-                   ],
+         'codes': ['KRW-BTC', ],
          'is_only_realtime': True}
     ]
 
     raw_counter = MessageCounter()
     anomaly_counter = MessageCounter()
+
+    backoff = 1
 
     # 웹소켓 연결 반복
     while True:
@@ -127,17 +122,17 @@ async def connect_and_create_topic(producer):
             producer.flush()
 
         print('Reconnecting...')
-        await asyncio.sleep(10)
+        await asyncio.sleep(backoff)
+        backoff = min(backoff * 2, 30)
 
-async def main(producer):
-    await connect_and_create_topic(producer)
+async def main():
+    await connect_and_create_topic()
 
 if __name__ == '__main__':
-    producer = get_producer()
-
     try:
         print('Producer Started')
-        asyncio.run(main(producer))
+        asyncio.run(main())
 
     except KeyboardInterrupt:
         print('Producer interrupted. Flush remaining messages...')
+        producer.flush()

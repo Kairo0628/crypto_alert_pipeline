@@ -4,3 +4,5 @@ spark_checkpoint
 
 *.json
 .env
+
+backup

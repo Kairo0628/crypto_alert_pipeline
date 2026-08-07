@@ -1,137 +1,141 @@
 from confluent_kafka import Producer, Consumer
-from collections import deque
-import json
-import requests
-from datetime import datetime
-
 from dotenv import load_dotenv
 import os
-
-N = 50
-PRICE_THRESHOLD = 2.5
-VOLUME_THRESHOLD = 10.0
-
-# for Test
-#N = 10
-#PRICE_THRESHOLD = 0.01
-#VOLUME_THRESHOLD = 3
+from datetime import datetime
+import requests
+import json
 
 load_dotenv()
 SLACK_URL = os.getenv('SLACK_URL')
 
-def get_producer():
-    config = {
-        'bootstrap.servers': 'localhost:19092',
+MAX_BUFFER_SIZE = 50
+VOLUME_THRESHOLD = 15.0
+PRICE_THRESHOLD = 2.5
+
+CRYPTO = ['KRW-BTC', ]
+PRICE_BUFFER = {i: None for i in CRYPTO}
+VOLUME_BUFFER = {i: [] for i in CRYPTO}
+
+producer = Producer(
+    {
+        'bootstrap.servers': 'localhost:19092'
     }
+)
 
-    return Producer(config = config)
-
-def get_consumer():
-    config = {
+consumer = Consumer(
+    {
         'bootstrap.servers': 'localhost:19092',
         'group.id': 'crypto_alert',
         'auto.offset.reset': 'earliest'
     }
+)
 
-    return Consumer(config = config)
+def send_slack_message(code, price, volume, alert_type, rate, timestamp):
+    if alert_type == 'price':
+        msg = '체결가'
+        emoji = ':whale2:'
+    else:
+        msg = '거래량'
+        emoji = ':rotating_light:'
+
+    params = {
+        'text': f'''*{code} 종목 {msg} 이상 감지*
+        - 거래 일시: {datetime.fromtimestamp(timestamp)}
+        - 체결가: {price}
+        - 거래량: {volume}
+        - {msg} 변화율: {rate}''',
+        'username': 'Alert Bot',
+        'icon_emoji': emoji
+    }
+
+    requests.post(url = SLACK_URL, json = params)
 
 def main():
-    producer = get_producer()
-    consumer = get_consumer()
-
     topic = 'anomaly_upbit_tickers'
     consumer.subscribe([topic])
 
-    volume_buffer = {
-        'KRW-BTC': deque(maxlen = N)
-    }
-
-    prev_price = None
-
     while True:
-        msg = consumer.poll(0)
-
-        if msg == None:
-            continue
-
-        if msg.error():
-            print(f'Kafka Error: {msg.error()}')
-            continue
-
         try:
+            msg = consumer.poll(0)
+
+            if not msg:
+                continue
+
+            if msg.error():
+                print(f'Kafka Error: {msg.error()}')
+                continue
+
             raw_msg = msg.value().decode()
             parsed_msg = json.loads(raw_msg)
 
-            curr_code = parsed_msg['code']
-            curr_buffer = volume_buffer[curr_code]
-
-            curr_volume = parsed_msg['trade_volume']
+            code = parsed_msg['code']
             curr_price = parsed_msg['trade_price']
+            curr_volume = parsed_msg['trade_volume']
+
+            prev_price = PRICE_BUFFER[code]
+            buffer = VOLUME_BUFFER[code]
 
             # 거래량 이상 감지
-            if len(curr_buffer) >= N:
-                volume_change_rate = curr_volume / (sum(curr_buffer) / N)
+            if len(buffer) >= MAX_BUFFER_SIZE:
+                volume_change_rate = curr_volume / (sum(buffer) / MAX_BUFFER_SIZE)
                 if volume_change_rate >= VOLUME_THRESHOLD:
                     producer.produce(
                         topic = 'kafka_anomaly',
-                        key = curr_code.encode(),
-                        value = {
-                            'code': curr_code,
+                        key = code.encode(),
+                        value = json.dumps({
+                            'code': code,
                             'trade_price': curr_price,
                             'trade_volume': curr_volume,
                             'alert_type': 'volume',
-                            'ratio': volume_change_rate,
+                            'rate': volume_change_rate,
                             'raw_timestamp': parsed_msg['raw_timestamp'],
                             'timestamp': parsed_msg['timestamp'],
-                        }
+                        }).encode()
                     )
                     producer.poll(0)
 
-                    params = {
-                        'text': f'''*거래량 이상 발생*
-                        - 발생 일시: {datetime.fromtimestamp(parsed_msg['timestamp'])}
-                        - 체결가: {curr_price}
-                        - 거래량: {curr_volume}
-                        - 거래량 변화율: {volume_change_rate}''',
-                        'username': 'Alert Bot',
-                        'icon_emoji': ':whale2:'
-                    }
-                    requests.post(url = SLACK_URL, json = params)
-            
-            curr_buffer.append(curr_volume)
+                    send_slack_message(
+                        code,
+                        curr_price,
+                        curr_volume,
+                        'volume',
+                        volume_change_rate,
+                        parsed_msg['timestamp']
+                    )
+
+            buffer.append(curr_volume)
+            VOLUME_BUFFER[code] = buffer[-MAX_BUFFER_SIZE:]
 
             # 체결가 이상 감지
-            if prev_price is not None:
+            if prev_price:
                 price_change_rate = ((curr_price - prev_price) / prev_price) * 100
                 if abs(price_change_rate) >= PRICE_THRESHOLD:
                     producer.produce(
                         topic = 'kafka_anomaly',
-                        key = curr_code.encode(),
-                        value = {
-                            'code': curr_code,
+                        key = code.encode(),
+                        value = json.dumps({
+                            'code': code,
                             'trade_price': curr_price,
                             'trade_volume': curr_volume,
                             'alert_type': 'price',
-                            'ratio': price_change_rate,
+                            'rate': price_change_rate,
                             'raw_timestamp': parsed_msg['raw_timestamp'],
                             'timestamp': parsed_msg['timestamp'],
-                        }
+                        }).encode()
                     )
                     producer.poll(0)
 
-                    params = {
-                        'text': f'''*체결가 이상 발생*
-                        - 발생 일시: {datetime.fromtimestamp(parsed_msg['timestamp'])}
-                        - 체결가: {curr_price}
-                        - 거래량: {curr_volume}
-                        - 체결가 변화율: {price_change_rate}''',
-                        'username': 'Alert Bot',
-                        'icon_emoji': ':rotating_light:'
-                    }
-                    requests.post(url = SLACK_URL, json = params)
+                    send_slack_message(
+                        code,
+                        curr_price,
+                        curr_volume,
+                        'price',
+                        price_change_rate,
+                        parsed_msg['timestamp']
+                    )
 
-            prev_price = curr_price
-
+            PRICE_BUFFER[code] = curr_price
+        
         except Exception as e:
             print(f'Unexpected Error: {e}')
             print(msg.value())
@@ -145,4 +149,4 @@ if __name__ == '__main__':
         main()
 
     except KeyboardInterrupt:
-        print('Application inturrupted')
+        print('Kafka Anomaly inturrupted')
