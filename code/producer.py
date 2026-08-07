@@ -1,8 +1,9 @@
-from confluent_kafka import Producer
+import asyncio
 import json
 import uuid
+
 import websockets
-import asyncio
+from confluent_kafka import Producer
 
 producer = Producer(
     {

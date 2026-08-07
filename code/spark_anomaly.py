@@ -1,9 +1,10 @@
-from pyspark import SparkConf
-from pyspark.sql import SparkSession, Row
-from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType, TimestampType
+from collections.abc import Iterator
+
 import pyspark.sql.functions as F
-from typing import Iterator
+from pyspark import SparkConf
+from pyspark.sql import Row, SparkSession
+from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
+from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType, TimestampType
 
 MAX_BUFFER_SIZE = 50
 VOLUME_THRESHOLD = 15.0

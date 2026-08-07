@@ -1,9 +1,10 @@
-from confluent_kafka import Producer, Consumer
-from dotenv import load_dotenv
+import json
 import os
 from datetime import datetime
+
 import requests
-import json
+from confluent_kafka import Consumer, Producer
+from dotenv import load_dotenv
 
 load_dotenv()
 SLACK_URL = os.getenv('SLACK_URL')
