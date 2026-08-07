@@ -1,1 +1,4 @@
-ruff
+pyspark==4.1.1
+confluent-kafka==2.14.0
+requests
+python-dotenv

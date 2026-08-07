@@ -20,9 +20,9 @@ jobs:
           python-version: '3.13'
           cache: 'pip'
 
-      - name: Install Dependencies
+      - name: Install Ruff
         run: |
-          pip install -r requirements.txt
+          pip install ruff
 
       - name: Lint with Ruff
         run: ruff check .
