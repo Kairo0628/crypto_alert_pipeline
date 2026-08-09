@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime
+import statistics
 
 import requests
 from confluent_kafka import Consumer, Producer
@@ -10,7 +11,7 @@ load_dotenv()
 SLACK_URL = os.getenv('SLACK_URL')
 
 MAX_BUFFER_SIZE = 50
-VOLUME_THRESHOLD = 15.0
+VOLUME_THRESHOLD = 3.5
 PRICE_THRESHOLD = 2.5
 
 CRYPTO = ['KRW-BTC', ]
@@ -41,15 +42,26 @@ def send_slack_message(code, price, volume, alert_type, rate, timestamp):
 
     params = {
         'text': f'''*{code} 종목 {msg} 이상 감지*
-        - 거래 일시: {datetime.fromtimestamp(timestamp)}
-        - 체결가: {price}
-        - 거래량: {volume}
-        - {msg} 변화율: {rate}''',
+        - :calendar: 거래 일시: {datetime.fromtimestamp(timestamp)}
+        - :dollar: 체결가: {price}
+        - :receipt: 거래량: {volume}
+        - :bar_chart: {msg} 변화율: {rate}''',
         'username': 'Alert Bot',
         'icon_emoji': emoji
     }
 
     requests.post(url = SLACK_URL, json = params)
+
+def modified_z_score(volume_buffer, curr_volume):
+    median = statistics.median(volume_buffer)
+    mad = statistics.median([abs(i - median) for i in volume_buffer])
+
+    if mad == 0:
+        modified_z = 0
+    else:
+        modified_z = 0.6745 * (curr_volume - median) / mad
+
+    return modified_z
 
 def main():
     topic = 'anomaly_upbit_tickers'
@@ -78,8 +90,8 @@ def main():
 
             # 거래량 이상 감지
             if len(buffer) >= MAX_BUFFER_SIZE:
-                volume_change_rate = curr_volume / (sum(buffer) / MAX_BUFFER_SIZE)
-                if volume_change_rate >= VOLUME_THRESHOLD:
+                modified_z = modified_z_score(buffer, curr_volume)
+                if abs(modified_z) >= VOLUME_THRESHOLD:
                     producer.produce(
                         topic = 'kafka_anomaly',
                         key = code.encode(),
@@ -88,7 +100,7 @@ def main():
                             'trade_price': curr_price,
                             'trade_volume': curr_volume,
                             'alert_type': 'volume',
-                            'rate': volume_change_rate,
+                            'rate': modified_z,
                             'raw_timestamp': parsed_msg['raw_timestamp'],
                             'timestamp': parsed_msg['timestamp'],
                         }).encode()
@@ -100,7 +112,7 @@ def main():
                         curr_price,
                         curr_volume,
                         'volume',
-                        volume_change_rate,
+                        modified_z,
                         parsed_msg['timestamp']
                     )
 

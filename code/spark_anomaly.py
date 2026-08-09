@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+import statistics
 
 import pyspark.sql.functions as F
 from pyspark import SparkConf
@@ -7,8 +8,19 @@ from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType, TimestampType
 
 MAX_BUFFER_SIZE = 50
-VOLUME_THRESHOLD = 15.0
+VOLUME_THRESHOLD = 3.5
 PRICE_THRESHOLD = 2.5
+
+def modified_z_score(volume_buffer, curr_volume):
+    median = statistics.median(volume_buffer)
+    mad = statistics.median([abs(i - median) for i in volume_buffer])
+
+    if mad == 0:
+        modified_z = 0
+    else:
+        modified_z = 0.6745 * (curr_volume - median) / mad
+
+    return modified_z
 
 class AnomalyDetectorProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
@@ -36,14 +48,14 @@ class AnomalyDetectorProcessor(StatefulProcessor):
                 volume_buffer = []
 
             if len(volume_buffer) >= MAX_BUFFER_SIZE:
-                volume_change_rate = curr_volume / (sum(volume_buffer) / MAX_BUFFER_SIZE)
-                if volume_change_rate >= VOLUME_THRESHOLD:
+                modified_z = modified_z_score(volume_buffer, curr_volume)
+                if abs(modified_z) >= VOLUME_THRESHOLD:
                     output.append(
                         Row(code = key[0],
                             trade_price = curr_price,
                             trade_volume = curr_volume,
                             alert_type = 'volume',
-                            rate = volume_change_rate,
+                            rate = modified_z,
                             raw_timestamp = row.raw_timestamp,
                             timestamp = row.timestamp)
                     )
