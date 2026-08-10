@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime
 import statistics
+import time
 
 import requests
 from confluent_kafka import Consumer, Producer
@@ -17,6 +18,8 @@ PRICE_THRESHOLD = 2.5
 CRYPTO = ['KRW-BTC', 'KRW-ETH', 'KRW-USDT', 'KRW-XRP']
 PRICE_BUFFER = {i: None for i in CRYPTO}
 VOLUME_BUFFER = {i: [] for i in CRYPTO}
+ALERT_COOLDOWN = 30
+COOLDOWN_BUFFER = {i: {'price': 0, 'volume': 0} for i in CRYPTO}
 
 producer = Producer(
     {
@@ -88,10 +91,13 @@ def main():
             prev_price = PRICE_BUFFER[code]
             buffer = VOLUME_BUFFER[code]
 
+            now = time.time()
+
             # 거래량 이상 감지
             if len(buffer) >= MAX_BUFFER_SIZE:
                 modified_z = modified_z_score(buffer, curr_volume)
-                if abs(modified_z) >= VOLUME_THRESHOLD:
+                if abs(modified_z) >= VOLUME_THRESHOLD\
+                    and (now - COOLDOWN_BUFFER[code]['volume']) >= ALERT_COOLDOWN:
                     producer.produce(
                         topic = 'kafka_anomaly',
                         key = code.encode(),
@@ -116,13 +122,16 @@ def main():
                         parsed_msg['timestamp']
                     )
 
+                    COOLDOWN_BUFFER[code]['volume'] = now
+
             buffer.append(curr_volume)
             VOLUME_BUFFER[code] = buffer[-MAX_BUFFER_SIZE:]
 
             # 체결가 이상 감지
             if prev_price:
                 price_change_rate = ((curr_price - prev_price) / prev_price) * 100
-                if abs(price_change_rate) >= PRICE_THRESHOLD:
+                if abs(price_change_rate) >= PRICE_THRESHOLD\
+                    and (now - COOLDOWN_BUFFER[code]['price']) >= ALERT_COOLDOWN:
                     producer.produce(
                         topic = 'kafka_anomaly',
                         key = code.encode(),
@@ -146,6 +155,8 @@ def main():
                         price_change_rate,
                         parsed_msg['timestamp']
                     )
+
+                    COOLDOWN_BUFFER[code]['price'] = now
 
             PRICE_BUFFER[code] = curr_price
         
