@@ -39,7 +39,7 @@ class MessageCounter:
     # 메시지 카운터와 on_delivery 함수를 여기서 정의
     # 메시지가 정상적으로 전송된 경우 카운터 증가
 
-    # 로그가 대량으로 출력되는 것을 방지하기 위해 100개 단위로 전송이 완료된 경우 출력
+    # 로그가 대량으로 출력되는 것을 방지하기 위해 1,000개 단위로 전송이 완료된 경우 출력
     def __init__(self):
         self.msg_count = 0
 
@@ -49,7 +49,7 @@ class MessageCounter:
             return
         
         self.msg_count += 1
-        if self.msg_count % 100 == 0:
+        if self.msg_count % 1000 == 0:
             print(f'Total {self.msg_count:,} {msg.topic()} messages successfully delivered !')
             print(f'Recent {msg.topic()} message: {json.loads(msg.value())}')
 
@@ -60,7 +60,7 @@ async def connect_and_create_topic():
     ws_msg = [
         {'ticket': str(uuid.uuid1())},
         {'type': 'ticker',
-         'codes': ['KRW-BTC', ],
+         'codes': ['KRW-BTC', 'KRW-ETH', 'KRW-USDT', 'KRW-XRP'],
          'is_only_realtime': True}
     ]
 
