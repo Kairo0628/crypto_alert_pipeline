@@ -1,8 +1,8 @@
-kafka-logs/metadata
-kafka-logs/data
-spark_checkpoint
-
-*.json
 .env
 
 backup
+kafka-logs/metadata/*
+kafka-logs/data/*
+!kafka-logs/metadata/.gitkeep
+!kafka-logs/data/.gitkeep
+spark_checkpoint
