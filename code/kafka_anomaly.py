@@ -2,7 +2,6 @@ import json
 import os
 from datetime import datetime
 import statistics
-import time
 
 import requests
 from confluent_kafka import Consumer, Producer
@@ -12,25 +11,25 @@ load_dotenv()
 SLACK_URL = os.getenv('SLACK_URL')
 
 MAX_BUFFER_SIZE = 50
-VOLUME_THRESHOLD = 3.5
-PRICE_THRESHOLD = 2.5
+VOLUME_BASELINE_THRESHOLD = 5
+VOLUME_HISTORY_THRESHOLD = 10
+PRICE_THRESHOLD = 1.5
 
-CRYPTO = ['KRW-BTC', 'KRW-ETH', 'KRW-USDT', 'KRW-XRP']
-PRICE_BUFFER = {i: None for i in CRYPTO}
-VOLUME_BUFFER = {i: [] for i in CRYPTO}
-ALERT_COOLDOWN = 30
-COOLDOWN_BUFFER = {i: {'price': 0, 'volume': 0} for i in CRYPTO}
+CRYPTO = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
+PRICE_BUFFER = {i: [] for i in CRYPTO}
+VOLUME_BASELINE_BUFFER = {i: [] for i in CRYPTO}
+VOLUME_HISTORY_BUFFER = {i: [] for i in CRYPTO}
 
 producer = Producer(
     {
-        'bootstrap.servers': 'localhost:19092'
+        'bootstrap.servers': 'localhost:29092'
     }
 )
 
 consumer = Consumer(
     {
-        'bootstrap.servers': 'localhost:19092',
-        'group.id': 'crypto_alert',
+        'bootstrap.servers': 'localhost:29092',
+        'group.id': 'kafka_anomaly',
         'auto.offset.reset': 'earliest'
     }
 )
@@ -88,16 +87,19 @@ def main():
             curr_price = parsed_msg['trade_price']
             curr_volume = parsed_msg['trade_volume']
 
-            prev_price = PRICE_BUFFER[code]
-            buffer = VOLUME_BUFFER[code]
-
-            now = time.time()
+            price_buffer = PRICE_BUFFER[code]
+            volume_baseline = VOLUME_BASELINE_BUFFER[code]
+            volume_history = VOLUME_HISTORY_BUFFER[code]
 
             # 거래량 이상 감지
-            if len(buffer) >= MAX_BUFFER_SIZE:
-                modified_z = modified_z_score(buffer, curr_volume)
-                if abs(modified_z) >= VOLUME_THRESHOLD\
-                    and (now - COOLDOWN_BUFFER[code]['volume']) >= ALERT_COOLDOWN:
+            is_volume_alert = False
+            if len(volume_baseline) >= MAX_BUFFER_SIZE:
+                modified_z = modified_z_score(volume_baseline, curr_volume)
+
+                if abs(modified_z) >= VOLUME_BASELINE_THRESHOLD \
+                    and curr_volume >= statistics.mean(volume_history) * VOLUME_HISTORY_THRESHOLD:
+                    is_volume_alert = True
+
                     producer.produce(
                         topic = 'kafka_anomaly',
                         key = code.encode(),
@@ -122,16 +124,18 @@ def main():
                         parsed_msg['timestamp']
                     )
 
-                    COOLDOWN_BUFFER[code]['volume'] = now
-
-            buffer.append(curr_volume)
-            VOLUME_BUFFER[code] = buffer[-MAX_BUFFER_SIZE:]
+            if not is_volume_alert:
+                volume_baseline.append(curr_volume)
+                VOLUME_BASELINE_BUFFER[code] = volume_baseline[-MAX_BUFFER_SIZE:]
+            volume_history.append(curr_volume)
+            VOLUME_HISTORY_BUFFER[code] = volume_history[-MAX_BUFFER_SIZE:]
 
             # 체결가 이상 감지
-            if prev_price:
-                price_change_rate = ((curr_price - prev_price) / prev_price) * 100
-                if abs(price_change_rate) >= PRICE_THRESHOLD\
-                    and (now - COOLDOWN_BUFFER[code]['price']) >= ALERT_COOLDOWN:
+            if len(price_buffer) >= MAX_BUFFER_SIZE:
+                mean_price = statistics.mean(price_buffer)
+                price_change_rate = ((curr_price - mean_price) / mean_price) * 100
+
+                if abs(price_change_rate) >= PRICE_THRESHOLD:
                     producer.produce(
                         topic = 'kafka_anomaly',
                         key = code.encode(),
@@ -156,9 +160,8 @@ def main():
                         parsed_msg['timestamp']
                     )
 
-                    COOLDOWN_BUFFER[code]['price'] = now
-
-            PRICE_BUFFER[code] = curr_price
+            price_buffer.append(curr_price)
+            PRICE_BUFFER[code] = price_buffer[-MAX_BUFFER_SIZE:]
         
         except Exception as e:
             print(f'Unexpected Error: {e}')
