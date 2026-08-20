@@ -20,13 +20,13 @@ services:
     image: apache/kafka:4.2.1
     container_name: broker
     ports:
-      - "19092:19092"
+      - "29092:29092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
 
-      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://broker:9092,EXTERNAL://localhost:19092
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://broker:9092,EXTERNAL://localhost:29092
 
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -65,3 +65,17 @@ services:
       KAFKA_BROKERS: broker:9092
     depends_on:
       - broker
+
+  spark:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spark
+    ports:
+      - "4040:4040"
+    volumes:
+      - ./code:/opt/spark/spark_app
+      - ./spark_checkpoint:/opt/spark/spark_checkpoint
+    depends_on:
+      - broker
+    entrypoint: ["tail", "-f", "/dev/null"]
