@@ -1,8 +1,5 @@
 .env
 
-backup
-kafka-logs/metadata/*
-kafka-logs/data/*
-!kafka-logs/metadata/.gitkeep
-!kafka-logs/data/.gitkeep
-spark_checkpoint
+/backup
+/kafka-logs
+/spark_checkpoint

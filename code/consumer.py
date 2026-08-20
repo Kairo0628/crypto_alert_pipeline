@@ -7,7 +7,7 @@ from confluent_kafka import Consumer
 
 consumer = Consumer(
     {
-        'bootstrap.servers': 'localhost:19092',
+        'bootstrap.servers': 'localhost:29092',
         'group.id': 'crypto_raw',
         'auto.offset.reset': 'earliest'
     }
@@ -17,7 +17,7 @@ def save(records):
     now = datetime.now().strftime('%Y%m%d_%H%M%S')
 
     # 파일 경로가 해당 스크립트를 실행한 지점에서의 하위 폴더(raw_data)이므로
-    # 원하는 경로에 저장하기 위해서는 프로젝트 루트 폴더에서 스크립트를 실행해야 함
+    # 원하는 경로(/raw_data)에 저장하기 위해서는 프로젝트 루트 폴더에서 스크립트를 실행해야 함
     with open(f'./raw_data/{now}_{uuid.uuid4().hex}.json', 'w', encoding = 'utf-8') as f:
         f.writelines(json.dumps(r, ensure_ascii = False) + '\n' for r in records)
 
