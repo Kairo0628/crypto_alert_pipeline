@@ -5,9 +5,16 @@ import uuid
 import websockets
 from confluent_kafka import Producer
 
+CRYPTO_PARTITION_MAP = {
+    'KRW-BTC': 0,
+    'KRW-ETH': 1,
+    'KRW-XRP': 2,
+    'KRW-SOL': 3
+}
+
 producer = Producer(
     {
-        'bootstrap.servers': 'localhost:19092',
+        'bootstrap.servers': 'localhost:29092',
 
         # Kafka Producer 설계
 
@@ -60,7 +67,7 @@ async def connect_and_create_topic():
     ws_msg = [
         {'ticket': str(uuid.uuid1())},
         {'type': 'ticker',
-         'codes': ['KRW-BTC', 'KRW-ETH', 'KRW-USDT', 'KRW-XRP'],
+         'codes': ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL'],
          'is_only_realtime': True}
     ]
 
@@ -108,7 +115,8 @@ async def connect_and_create_topic():
                         topic = 'anomaly_upbit_tickers',
                         key = anomaly_data['code'].encode(),
                         value = json.dumps(anomaly_data).encode(),
-                        on_delivery = anomaly_counter.delivery_callback
+                        on_delivery = anomaly_counter.delivery_callback,
+                        partition = CRYPTO_PARTITION_MAP[anomaly_data['code']]
                     )
 
                     producer.poll(0)
