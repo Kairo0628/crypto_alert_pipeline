@@ -14,7 +14,7 @@ CRYPTO_PARTITION_MAP = {
 
 producer = Producer(
     {
-        'bootstrap.servers': 'localhost:29092',
+        'bootstrap.servers': 'broker:9092',
 
         # Kafka Producer 설계
 
@@ -107,8 +107,8 @@ async def connect_and_create_topic():
                         'code': raw_data['code'],
                         'trade_price': raw_data['trade_price'],
                         'trade_volume': raw_data['trade_volume'],
-                        'raw_timestamp': raw_data['timestamp'],
-                        'timestamp': raw_data['timestamp'] // 1000
+                        'raw_timestamp': raw_data['trade_timestamp'],
+                        'timestamp': raw_data['trade_timestamp'] // 1000
                     }
 
                     producer.produce(

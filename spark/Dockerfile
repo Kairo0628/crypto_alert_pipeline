@@ -13,4 +13,4 @@ RUN mkdir -p "${SPARK_HOME}/conf" && \
     chmod -R 777 /tmp/.ivy2 && \
     echo "spark.jars.ivy /tmp/.ivy2" >> "${SPARK_HOME}/conf/spark-defaults.conf"
 
-USER spark
+COPY . "${SPARK_HOME}/spark_app/"

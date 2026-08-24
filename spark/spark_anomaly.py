@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 import statistics
+from datetime import datetime
 
 import pyspark.sql.functions as F
 from pyspark import SparkConf
@@ -79,7 +80,8 @@ class AnomalyDetectorProcessor(StatefulProcessor):
                             alert_type = 'volume',
                             rate = modified_z,
                             raw_timestamp = row.raw_timestamp,
-                            timestamp = row.timestamp)
+                            timestamp = row.timestamp,
+                            alert_timestamp = datetime.now().timestamp())
                     )
             
             if not is_volume_alert:
@@ -91,14 +93,12 @@ class AnomalyDetectorProcessor(StatefulProcessor):
             self.volume_history.put([(i, ) for i in volume_history])
 
             # 체결가 이상 감지
-            # 직전 50개의 거래를 모아 평균을 계산하여 2.5배 이상 높은 경우 이상 거래로 간주
+            # 직전 50개의 거래를 모아 평균을 계산하여 1.5배 이상 높은 경우 이상 거래로 간주
             if len(price_buffer) >= MAX_BUFFER_SIZE:
                 mean_price = statistics.mean(price_buffer)
                 price_change_rate = (curr_price - mean_price) / mean_price * 100
 
                 if abs(price_change_rate) >= PRICE_THRESHOLD:
-                    is_price_alert = True
-
                     output.append(
                         Row(code = key[0],
                             trade_price = curr_price,

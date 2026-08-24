@@ -7,7 +7,7 @@ from confluent_kafka import Consumer
 
 consumer = Consumer(
     {
-        'bootstrap.servers': 'localhost:29092',
+        'bootstrap.servers': 'broker:9092',
         'group.id': 'crypto_raw',
         'auto.offset.reset': 'earliest'
     }

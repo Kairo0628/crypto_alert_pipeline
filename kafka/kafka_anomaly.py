@@ -1,7 +1,7 @@
 import json
 import os
-from datetime import datetime
 import statistics
+from datetime import datetime
 
 import requests
 from confluent_kafka import Consumer, Producer
@@ -22,13 +22,13 @@ VOLUME_HISTORY_BUFFER = {i: [] for i in CRYPTO}
 
 producer = Producer(
     {
-        'bootstrap.servers': 'localhost:29092'
+        'bootstrap.servers': 'broker:9092'
     }
 )
 
 consumer = Consumer(
     {
-        'bootstrap.servers': 'localhost:29092',
+        'bootstrap.servers': 'broker:9092',
         'group.id': 'kafka_anomaly',
         'auto.offset.reset': 'earliest'
     }
