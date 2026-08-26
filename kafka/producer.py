@@ -30,14 +30,14 @@ producer = Producer(
         
         'linger.ms': 5, # 메시지 배치 처리 대기 시간, 5ms
         'acks': -1, # 복제본 저장 결과를 확인할지 여부
-        'batch.size': 1024 * 32, # 배치 최대 크기
+        'batch.size': 1024, # 배치 최대 크기
         'max.in.flight.requests.per.connection': 5, # 한 번에 보낼 수 있는 메시지 개수
         'compression.type': 'lz4', # 메시지 압축 방식. 압축률은 작지만 적은 CPU 사용으로 빠른 처리 가능
-        'retries': 5, # 메시지 전송 오류 시 재시도 횟수
+        'retries': 3, # 메시지 전송 오류 시 재시도 횟수
         'request.timeout.ms': 1000, # 브로커로부터 전송 완료 응답 대기 시간. 넘으면 재시도
         'retry.backoff.ms': 60, # 메시지 전송 재시도 대기 시간
-        'retry.backoff.max.ms': 300, # 최대 메시지 전송 재시도 누적 대기 시간
-        'delivery.timeout.ms': 1500, # 메시지 생성부터 전송 완료까지 존재 가능한 시간
+        'retry.backoff.max.ms': 180, # 최대 메시지 전송 재시도 누적 대기 시간
+        'delivery.timeout.ms': 3000, # 메시지 생성부터 전송 완료까지 존재 가능한 시간
     }
 )
 
