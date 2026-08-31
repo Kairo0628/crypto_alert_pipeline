@@ -1,5 +1,7 @@
 .env
 
 /backup
+/kafka-connect/jdbc
 /kafka-logs
-/spark_checkpoint
+/spark-checkpoint
+/postgres-db

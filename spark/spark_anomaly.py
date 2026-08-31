@@ -169,7 +169,7 @@ if __name__ == '__main__':
                 .format('kafka')\
                 .option('kafka.bootstrap.servers', 'broker:9092')\
                 .option('topic', 'spark_anomaly')\
-                .option('checkpointLocation', '/opt/spark/spark_checkpoint')\
+                .option('checkpointLocation', '/opt/spark/spark-checkpoint')\
                 .start()
     
     query.awaitTermination()
