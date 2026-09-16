@@ -100,7 +100,8 @@ async def connect_and_create_topic():
                         topic = 'raw_upbit_tickers',
                         key = raw_data['code'].encode(),
                         value = json.dumps(raw_data).encode(),
-                        on_delivery = raw_counter.delivery_callback
+                        on_delivery = raw_counter.delivery_callback,
+                        partition = CRYPTO_PARTITION_MAP[anomaly_data['code']]
                     )
 
                     anomaly_data = {
