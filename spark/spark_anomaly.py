@@ -11,7 +11,7 @@ from pyspark.sql.types import DoubleType, LongType, StringType, StructField, Str
 MAX_BUFFER_SIZE = 50
 VOLUME_BASELINE_THRESHOLD = 5
 VOLUME_HISTORY_THRESHOLD = 10
-PRICE_THRESHOLD = 1.5
+PRICE_THRESHOLD = 1.0
 
 def modified_z_score(volume_buffer, curr_volume):
     median = statistics.median(volume_buffer)
@@ -80,8 +80,7 @@ class AnomalyDetectorProcessor(StatefulProcessor):
                             alert_type = 'volume',
                             rate = modified_z,
                             raw_timestamp = row.raw_timestamp,
-                            timestamp = row.timestamp,
-                            alert_timestamp = datetime.now().timestamp())
+                            timestamp = row.timestamp)
                     )
             
             if not is_volume_alert:
