@@ -6,7 +6,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir pandas pyarrow protobuf
+COPY requirements.txt ./
+
+RUN pip install --no-cache-dir -r requirements.txt
 
 RUN mkdir -p "${SPARK_HOME}/conf" && \
     mkdir -p /tmp/.ivy2/jars /tmp/.ivy2/cache && \
