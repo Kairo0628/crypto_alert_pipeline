@@ -101,7 +101,7 @@ async def connect_and_create_topic():
                         key = raw_data['code'].encode(),
                         value = json.dumps(raw_data).encode(),
                         on_delivery = raw_counter.delivery_callback,
-                        partition = CRYPTO_PARTITION_MAP[anomaly_data['code']]
+                        partition = CRYPTO_PARTITION_MAP[raw_data['code']]
                     )
 
                     anomaly_data = {
