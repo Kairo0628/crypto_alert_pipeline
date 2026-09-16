@@ -47,21 +47,21 @@ crypto_alert_pipeline
 **producer.py**
 - websockets를 이용하여 Upbit로부터 실시간 체결 데이터를 수집
 - 수집되는 가상화폐 종목은 4개(BTC, ETH, SOL, XRP)
-- 데이터는 원본(**raw_upbit_tickers**)과 이상 감지용(**anomaly_upbit_tickers**) 두 개의 토픽에 적재
+- 데이터는 원본 `raw_upbit_tickers`과 이상 감지용 `anomaly_upbit_tickers` 두 개의 토픽에 적재
 - Upbit 서버 연결 실패 시 지수 백오프 방식을 통해 연결 재시도
 - 기본 해시 파티셔닝 방식은 브로커에 빈 파티션이 존재하는 문제가 발생하므로 적재 과정에서 파티션을 직접 매핑함
-- Spark의 TimestampType은 밀리초 단위의 타임스탬프 형식을 이해하지 못하는 문제가 존재하여 이상 감지용 데이터는 raw_timestamp와 timestamp 두 개의 컬럼으로 구분함
+- Spark의 TimestampType은 밀리초 단위의 타임스탬프 형식을 이해하지 못하는 문제가 존재하여 이상 감지용 데이터는 `raw_timestamp`와 `timestamp` 두 개의 컬럼으로 구분함
 
 **이상 감지 로직**
 - 체결가와 거래량 두 항목에 대해 이상 감지 수행
 - 가상화폐 종목별로 50개의 거래 정보가 쌓인 순간 이상 감지 시작
-- 거래량 이상 감지
+- **거래량 이상 감지**
    - history(전체 거래), baseline(이상치 제외) 두 개의 버퍼를 사용
    - 가상화폐는 소수점 단위로 거래되므로 편차가 매우 크기 때문에 baseline 버퍼 기준 MAD(중앙값 절대 편차) 기반 Modified-Z-Score 통계를 활용
    - $|\mathbf{Z-Score}| \ge 5$인 경우 이상 거래로 1차 판단
    - history 버퍼의 평균보다 10배 이상인 경우 최종 이상 거래로 확정
    - history 버퍼는 이상치를 포함하기 때문에 최근 거래량과 유사하다면 이상으로 판단하지 않으며, 이상치가 입력되는 순간 평균이 전체적으로 상승하기 때문에 연속적인 알람을 방지하는 효과가 있음
-- 체결가 이상 감지
+- **체결가 이상 감지**
    - 모든 체결가 정보를 포함하는 단일 버퍼를 사용
    - 단일 버퍼의 평균과 새로운 체결가를 비교하여 단기간 1% 이상 변동하는 경우 이상 거래로 감지
 
@@ -70,15 +70,15 @@ crypto_alert_pipeline
 - 윈도우 기반 집계 방식 대신 필요한 값만 저장할 수 있는 상태 기반 처리 방식으로 구현
 - 이전 체결가, 거래량(전체 거래량, 이상치 제외 거래량)을 저장하는 상태 변수를 사용
 - Spark의 Row 객체를 이용하는 transformWithState 메소드는 Pandas를 사용하지 않아 Python <-> JVM 오버헤드를 줄일 수 있음
-- 이상 감지된 데이터는 **spark_anomaly** 토픽으로 재적재
-- 체크포인트를 활용하여 상태 변수와 오프셋을 기록하여 프로그램 재시작 시 기존 정보 유실 방지
+- 이상 감지된 데이터는 `spark_anomaly` 토픽으로 재적재
+- 체크포인트를 활용하여 상태 변수와 오프셋을 기록하여 프로그램 재시작 시 기존 정보 유실 방지 설정
 
 **kafka_anomaly.py**
 - Kafka Consumer 기반 이상 감지
-- 이상 감지 로직은 **spark_anomaly.py**와 동일
+- 이상 감지 로직은 `spark_anomaly.py`와 동일
 - Spark의 상태 변수에 해당하는 요소는 전역 변수로 대체 구현
 - 이상 감지 시 Slack으로 알림 전송
-- 이상 감지된 데이터는 **kafka_anomaly** 토픽으로 재적재
+- 이상 감지된 데이터는 `kafka_anomaly` 토픽으로 재적재
 - Spark의 체크포인트와 같은 기능이 따로 구현되어있지 않아 프로그램을 재시작하는 경우 기존 정보를 읽을 수는 없음
 
 ---
@@ -98,7 +98,17 @@ crypto_alert_pipeline
    SLACK_URL=https://hooks.slack.com/services/...
    ```
 
-3. 컨테이너 실행
+3. Kafka Connect 플러그인 다운로드
+   - Kafka와 PostgreSQL를 연동하기 위해 Confluent의 JDBC Connector를 다운로드한다.
+      - https://www.confluent.io/hub/confluentinc/kafka-connect-jdbc
+   - 스키마 없는 메시지를 커넥터로 전달하기 위해 SchemalessJsonConverter를 다운로드한다.
+      - https://github.com/natengall/connect-schemaless-json
+
+   - `kafka-connect/` 디렉터리 하위에 `jdbc`라는 이름의 폴더를 생성한다.
+   - 다운로드한 `.jar` 파일들을 생성한 `jdbc` 폴더에 넣는다.
+
+
+4. 컨테이너 실행
    - 프로젝트 루트 폴더(`docker-compose.yml` 파일의 위치)에서 전체 컨테이너를 실행한다.
 
    - 최초 실행 시
@@ -111,10 +121,19 @@ crypto_alert_pipeline
    docker compose up -d
    ```
 
-4. Kafka Connect 등록
+5. Kafka Connect 등록
    - 컨테이너가 정상적으로 실행되었다면 Postgres Sink Connector를 등록한다.
    ```bash
    curl -X POST http://localhost:8083/connectors \
       -H "Content-Type: application/json" \
       --data @kafka-connect/postgres-sink.json
    ```
+
+6. 실행 확인
+   - Redpanda Console: http://localhost:8080
+      - 메인 페이지에서 브로커 연결 상태 확인 가능
+      - 화면 좌측 바의 Topics 탭에서 토픽 생성 및 메시지 저장 여부 확인 가능
+   - Adminer: http://localhost:8088
+      - DB - PostgreSQL
+      - 서버/사용자이름/비밀번호/데이터베이스: postgres 입력
+      - 토픽과 동일한 이름의 테이블이 생성되었는지, 데이터가 적재되는지 확인 가능
