@@ -91,10 +91,10 @@ class AnomalyDetectorProcessor(StatefulProcessor):
             self.volume_history.put([(i, ) for i in volume_history])
 
             # 체결가 이상 감지
-            # 직전 50개의 거래를 모아 평균을 계산하여 1.0배 이상 높은 경우 이상 거래로 간주
+            # 직전 50개의 거래를 모아 중앙값을 계산하여 1.0배 이상 높은 경우 이상 거래로 간주
             if len(price_buffer) >= MAX_BUFFER_SIZE:
-                mean_price = statistics.mean(price_buffer)
-                price_change_rate = (curr_price - mean_price) / mean_price * 100
+                median_price = statistics.median(price_buffer)
+                price_change_rate = (curr_price - median_price) / median_price * 100
 
                 if abs(price_change_rate) >= PRICE_THRESHOLD:
                     output.append(
