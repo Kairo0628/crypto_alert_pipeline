@@ -96,7 +96,7 @@ def main():
             if len(volume_baseline) >= MAX_BUFFER_SIZE:
                 modified_z = modified_z_score(volume_baseline, curr_volume)
 
-                if abs(modified_z) >= VOLUME_BASELINE_THRESHOLD \
+                if modified_z >= VOLUME_BASELINE_THRESHOLD \
                     and curr_volume >= statistics.mean(volume_history) * VOLUME_HISTORY_THRESHOLD:
                     is_volume_alert = True
 
